@@ -9,7 +9,7 @@ from nose import with_setup
 from nose.tools import raises
 import unittest
 import threading
-from resourcemutexmanagement import ResourceMutexManager, ResourceUnavailableError
+from ResourceMutexManager import ResourceMutexManager, ResourceUnavailableError
 
 RESOURCE_ONE = "Resource1"
 RESOURCE_TWO = "Resource2"
@@ -81,13 +81,13 @@ class Test_ResourceLock(unittest.TestCase):
         self.lockManager._redisClient.delete.assert_called_once_with([])
         
     @with_setup(setUp, tearDown)
-    @patch("resourcemutexmanagement.ResourceMutexManager._updateExpiryThread")
+    @patch("ResourceMutexManager.ResourceMutexManager._updateExpiryThread")
     def test_startUpdateExpiryThread_startsThreadWhenThreadIsNone(self, patch):
         self.lockManager.startUpdateExpiryThread()
         self.assertTrue(self.lockManager._updateExpiryThread.called_once())
         
     @with_setup(setUp, tearDown)
-    @patch("resourcemutexmanagement.ResourceMutexManager._updateExpiryThread")
+    @patch("ResourceMutexManager.ResourceMutexManager._updateExpiryThread")
     @patch("threading.Thread")
     def test_startUpdateExpiryThread_startThreadWhenThreadIsntAlive(self, resourceLockManagerPatch, threadingPatch):
         self.lockManager._thread = threading.Thread()
@@ -96,7 +96,7 @@ class Test_ResourceLock(unittest.TestCase):
         self.assertTrue(self.lockManager._updateExpiryThread.call_once())
         
     @with_setup(setUp, tearDown)
-    @patch("resourcemutexmanagement.ResourceMutexManager._updateExpiryThread")
+    @patch("ResourceMutexManager.ResourceMutexManager._updateExpiryThread")
     @patch("threading.Thread")
     def test_startUpdateExpiryThread_doesntStartThreadWhenThreadIsAlive(self, resourceLockManagerPatch, threadingPatch):
         self.lockManager._thread = threading.Thread()
