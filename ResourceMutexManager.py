@@ -17,10 +17,7 @@ class ResourceUnavailableError(Exception):
 class ResourceMutexManager(object):
     
     def __init__(self, host='localhost', port=6379, db=0):
-        self._host = host,
-        self._port = port
-        self._db = db
-        self._redisClient = redis.StrictRedis(host=self._host, port=self._port, db=self._db)    
+        self._redisClient = redis.StrictRedis(host=host, port=port, db=db)    
         self._resources = []
         self._thread = None
         self._alive = False
