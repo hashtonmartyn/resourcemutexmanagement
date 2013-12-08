@@ -9,6 +9,7 @@ import time
 import logging
 
 RESOURCE_LOCK_TIMEOUT = 120 #seconds
+EXPIRY_UPDATE_INTERVAL = 20 #seconds
 
 
 class ResourceUnavailableError(Exception):
@@ -16,8 +17,9 @@ class ResourceUnavailableError(Exception):
 
 class ResourceMutexManager(object):
     
-    def __init__(self, host='localhost', port=6379, db=0):
-        self._redisClient = redis.StrictRedis(host=host, port=port, db=db)    
+    def __init__(self, value="ResourceInUse", host='localhost', port=6379, db=0):
+        self._redisClient = redis.StrictRedis(host=host, port=port, db=db) 
+        self._value = value   
         self._resources = []
         self._thread = None
         self._alive = False
@@ -25,7 +27,7 @@ class ResourceMutexManager(object):
         self.log = logging.getLogger('ResourceMutexManager')
         self.log.setLevel(logging.DEBUG)
         ch = logging.StreamHandler()
-        ch.setLevel(logging.ERROR)
+        ch.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         ch.setFormatter(formatter)
         self.log.addHandler(ch)
@@ -37,6 +39,7 @@ class ResourceMutexManager(object):
     def waitFor(self, resources, blocking=True, retryInterval=30):
         """
         @param resources: a string representation of the resource to lock
+        @param value: the value to set each resource key to, should be descriptive
         @param blocking: block until the resource is free
         @param retryInterval: int seconds between retry attempts
         @return: True if the lock has been acquired, False otherwise
@@ -45,7 +48,7 @@ class ResourceMutexManager(object):
         resources = [resources] if isinstance(resources, str) else resources
         while self._resources != resources:
             for resource in resources:
-                if self._redisClient.setnx(resource, RESOURCE_LOCK_TIMEOUT) == 1:
+                if self._redisClient.setnx(resource, self._value) == 1:
                     self.log.info("Acquired %s" % resource)
                     self._resources.append(resource)
                 else:
@@ -53,7 +56,8 @@ class ResourceMutexManager(object):
             if not blocking and self._resources != resources:
                 raise ResourceUnavailableError("Unable to acquire %s" % resource)
             elif self._resources != resources:
-                self.releaseResources()
+                if len(self._resources) > 0:
+                    self.releaseResources()
                 self.log.debug("Retrying in %.02f seconds" % float(retryInterval))
                 time.sleep(retryInterval)
         
@@ -74,7 +78,18 @@ class ResourceMutexManager(object):
         return resourcesReleased == numResourcesToRelease
     
     def _updateExpiryThread(self):
-        pass
+        while self._alive:
+            for resource in self._resources:
+                if self._redisClient.expire(resource, RESOURCE_LOCK_TIMEOUT) == 0:
+                    self.log.warning("Lock for %s has expired, attempting to re-acquire it")
+                    if self._redisClient.setnx(resource, self._value) == 1:
+                        self.log.debug("Successfully re-acquired %s" % resource)
+                    else:
+                        self.log.warning("Failed to re-acquire %s" % resource)
+                else:
+                    self.log.debug("Updated expiry for %s" % resource)
+                time.sleep(EXPIRY_UPDATE_INTERVAL)
+        self.log.debug("Update expiry thread terminated")
     
     def startUpdateExpiryThread(self):
         if self._thread is None or not self._thread.isAlive():
@@ -91,9 +106,16 @@ class ResourceMutexManager(object):
         self._alive = False
         self.log.info("Waiting for update expiry thread to stop")
         self._thread.join(2 * RESOURCE_LOCK_TIMEOUT)
-        joinTime = int(time.time() - startTime)
+        joinTime = time.time() - startTime
         if self._thread.isAlive():
-            self.log.warning("Update thread failed to join after %d seconds" % joinTime)
+            self.log.warning("Update expiry thread failed to join after %.02f seconds" % joinTime)
         else:
-            self.log.debug("Update thread joined after %d seconds" % joinTime)
-        
+            self.log.debug("Update expiry thread joined after %.02f seconds" % joinTime)
+            
+if __name__ == "__main__":
+    res = "SomeResource"
+    rmm = ResourceMutexManager()
+    rmm.waitFor(res)
+    rmm.startUpdateExpiryThread()
+    time.sleep(10)
+    rmm.stopUpdateExpiryThread()

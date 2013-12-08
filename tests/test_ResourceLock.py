@@ -104,3 +104,12 @@ class Test_ResourceLock(unittest.TestCase):
         self.lockManager.startUpdateExpiryThread()
         self.assertTrue(self.lockManager._updateExpiryThread.call_count == 0)
         
+    @with_setup(setUp, tearDown)
+    @patch("time.sleep")
+    def test_updateExpiryThread_updatesExpiry(self, timePatch):
+        self.assertTrue(self.lockManager.waitFor(RESOURCE_ONE))
+        self.lockManager.startUpdateExpiryThread()
+        self.assertTrue(self.lockManager._redisClient.expire.call_count > 0)
+        self.lockManager.stopUpdateExpiryThread()
+        self.assertFalse(self.lockManager._thread.isAlive())
+        
