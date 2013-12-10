@@ -7,6 +7,7 @@ import redis
 import threading
 import time
 import logging
+from contextlib import contextmanager
 
 RESOURCE_LOCK_TIMEOUT = 120 #seconds
 EXPIRY_UPDATE_INTERVAL = 20 #seconds
@@ -17,20 +18,30 @@ class ResourceUnavailableError(Exception):
 
 class ResourceMutexManager(object):
     
-    def __init__(self, value="ResourceInUse", host='localhost', port=6379, db=0):
+    def __init__(self, value="ResourceInUse", host='localhost', port=6379, db=0, log=None):
+        """
+        @param value: value to set the resource value to ie "descriptionOfThingUsingTheseResources"
+        @param host: the address that the redis server is being hosted
+        @param port: the port of the redis server
+        @param db: the redis db 
+        @param log: use your own logging module if you want
+        """
         self._redisClient = redis.StrictRedis(host=host, port=port, db=db) 
         self._value = value   
         self._resources = []
         self._thread = None
         self._alive = False
-            
-        self.log = logging.getLogger('ResourceMutexManager')
-        self.log.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
-        self.log.addHandler(ch)
+        
+        if log is None:
+            self.log = logging.getLogger('ResourceMutexManager')
+            self.log.setLevel(logging.DEBUG)
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            ch.setFormatter(formatter)
+            self.log.addHandler(ch)
+        else:
+            self.log = log
         
     @property
     def resources(self):
@@ -62,6 +73,17 @@ class ResourceMutexManager(object):
         
         return len(resources) == len(self._resources)
     
+    @contextmanager
+    def lock(self, resources):
+        """
+        @param resources: the resources to lock
+        """
+        self.waitFor(resources)
+        self.startUpdateExpiryThread()
+        yield
+        self.stopUpdateExpiryThread()
+        self.releaseResources()
+    
     def releaseResources(self):
         """
         @return: True if all of the currently held resources were released
@@ -77,6 +99,9 @@ class ResourceMutexManager(object):
         return resourcesReleased == numResourcesToRelease
     
     def _updateExpiryThread(self):
+        """
+        Don't call this directly
+        """
         while self._alive:
             for resource in self._resources:
                 if self._redisClient.expire(resource, RESOURCE_LOCK_TIMEOUT) == 0:
@@ -91,6 +116,10 @@ class ResourceMutexManager(object):
         self.log.debug("Update expiry thread terminated")
     
     def startUpdateExpiryThread(self):
+        """
+        Starts a thread to update the expiry of each resource's lock
+        @precondition: all resources are acquired before calling this
+        """
         if self._thread is None or not self._thread.isAlive():
             self._alive = True
             self.log.debug("Starting update expiry thread")
@@ -101,6 +130,11 @@ class ResourceMutexManager(object):
             self.log.debug("Update expiry thread is already running")
             
     def stopUpdateExpiryThread(self):
+        """
+        Stops the thread which updates each resource's lock expiry. You should probably call
+        releaseResources after this. Or not, your call since the resource lock should 
+        expire at some point anyway.
+        """
         startTime = time.time()
         self._alive = False
         self.log.info("Waiting for update expiry thread to stop")
@@ -112,10 +146,15 @@ class ResourceMutexManager(object):
             self.log.debug("Update expiry thread joined after %.02f seconds" % joinTime)
             
 if __name__ == "__main__":
-    res = "SomeResource"
+    res = str(time.time())
     rmm = ResourceMutexManager()
+    with rmm.lock(res) as f:
+        print "locked"
+    print "not locked"
+    
     rmm.waitFor(res)
     rmm.startUpdateExpiryThread()
     time.sleep(10)
     rmm.stopUpdateExpiryThread()
     rmm.releaseResources()
+    
