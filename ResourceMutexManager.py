@@ -39,7 +39,6 @@ class ResourceMutexManager(object):
     def waitFor(self, resources, blocking=True, retryInterval=30):
         """
         @param resources: a string representation of the resource to lock
-        @param value: the value to set each resource key to, should be descriptive
         @param blocking: block until the resource is free
         @param retryInterval: int seconds between retry attempts
         @return: True if the lock has been acquired, False otherwise
@@ -69,7 +68,7 @@ class ResourceMutexManager(object):
         """
         self.log.debug("Releasing locks on %s" % str(self._resources))
         numResourcesToRelease = len(self._resources)
-        resourcesReleased = self._redisClient.delete(self._resources)
+        resourcesReleased = self._redisClient.delete(*self._resources)
         if resourcesReleased == len(self._resources):
             self.log.debug("Released locks on %s" % str(self._resources))
         else:
@@ -119,3 +118,4 @@ if __name__ == "__main__":
     rmm.startUpdateExpiryThread()
     time.sleep(10)
     rmm.stopUpdateExpiryThread()
+    rmm.releaseResources()
