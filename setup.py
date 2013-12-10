@@ -6,7 +6,7 @@ Created on 9/12/2013
 from setuptools import setup
 
 setup(name='ResourceMutexManagement',
-      version='0.1',
+      version='0.2.0',
       description='Python module for controlling concurrent access to resources',
       author='Henry Ashton-Martyn',
       author_email='henry.ashton.martyn@gmail.com',
