@@ -112,7 +112,7 @@ class ResourceMutexManager(object):
                         self.log.warning("Failed to re-acquire %s" % resource)
                 else:
                     self.log.debug("Updated expiry for %s" % resource)
-                time.sleep(EXPIRY_UPDATE_INTERVAL)
+            time.sleep(EXPIRY_UPDATE_INTERVAL)
         self.log.debug("Update expiry thread terminated")
     
     def startUpdateExpiryThread(self):
