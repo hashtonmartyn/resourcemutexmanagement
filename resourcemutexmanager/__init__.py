@@ -1,2 +1,1 @@
-from ResourceMutexManager import ResourceMutexManager
-from ResourceMutexManager import ResourceUnavailableError
+from ResourceMutexManager import ResourceMutexManager, ResourceUnavailableError

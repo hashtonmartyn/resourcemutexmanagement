@@ -4,13 +4,10 @@ Created on 2/12/2013
 @author: henry
 '''
 from mock import patch
-from mock import Mock
-from nose import with_setup
 from nose.tools import raises
 import unittest
-import logging
 import threading
-from ResourceMutexManager import ResourceMutexManager, ResourceUnavailableError
+from resourcemutexmanager import ResourceMutexManager, ResourceUnavailableError
 
 RESOURCE_ONE = "Resource1"
 RESOURCE_TWO = "Resource2"
@@ -27,10 +24,6 @@ class Test_ResourceLock(unittest.TestCase):
         self.lockManager = ResourceMutexManager()
         self.lockManager._redisClient.setnx.return_value = 1
     
-    def tearDown(self):
-        pass
-    
-    @with_setup(setUp, tearDown)
     def test_waitForLock_defaultArgs_acquiresLockImmediately(self):
         self.assertTrue(self.lockManager.waitFor(RESOURCE_ONE),
                         "waitForLock should return True once the lock is acquired")
@@ -40,8 +33,7 @@ class Test_ResourceLock(unittest.TestCase):
 
         self.assertTrue(RESOURCE_ONE in str(self.lockManager._redisClient.setnx.call_args),
                         self.lockManager._redisClient.setnx.call_args)
-        
-    @with_setup(setUp, tearDown)
+
     def test_waitForLock_multipleResources_allResourcesAcquired(self):
         resources = [RESOURCE_ONE, RESOURCE_TWO]
         self.assertTrue(self.lockManager.waitFor(resources),
@@ -49,14 +41,12 @@ class Test_ResourceLock(unittest.TestCase):
         self.assertTrue(self.lockManager.resources == resources)
         for resource in resources:
             self.assertTrue(self.lockManager._redisClient.setnx.called_once_with(resource))
-            
-    @with_setup(setUp, tearDown)
+
     @raises(ResourceUnavailableError)
     def test_waitForLock_resourceUnavailableNotBlocking_raisesException(self):
         self.lockManager._redisClient.setnx.return_value = 0
         self.lockManager.waitFor(RESOURCE_ONE, blocking=False)
-        
-    @with_setup(setUp, tearDown)
+
     def test_releaseLock_oneLockAcquired_lockReleased(self):
         self.lockManager._redisClient.delete.return_value = 1
         self.assertTrue(self.lockManager.waitFor(RESOURCE_ONE))
@@ -65,7 +55,6 @@ class Test_ResourceLock(unittest.TestCase):
         self.assertTrue(self.lockManager._redisClient.delete.called_with(RESOURCE_ONE))
         self.assertTrue(self.lockManager.resources == [])
         
-    @with_setup(setUp, tearDown)
     def test_releaseLock_twoLocksAcquired_twoLocksReleased(self):
         self.lockManager._redisClient.delete.return_value = 2
         resources = [RESOURCE_ONE, RESOURCE_TWO]
@@ -75,37 +64,32 @@ class Test_ResourceLock(unittest.TestCase):
         self.assertTrue(self.lockManager._redisClient.delete.called_with(*resources))
         self.assertTrue(self.lockManager.resources == [])
         
-    @with_setup(setUp, tearDown)
     def test_releaseLock_noLockAcquired_returnsFalse(self):
         self.assertFalse(self.lockManager.releaseResources(),
                          "No resource locks acquired so none should have been deleted")
         self.lockManager._redisClient.delete.assert_called_once_with(*[])
         
-    @with_setup(setUp, tearDown)
-    @patch("ResourceMutexManager.ResourceMutexManager._updateExpiryThread")
+    @patch("resourcemutexmanager.ResourceMutexManager._updateExpiryThread")
     def test_startUpdateExpiryThread_startsThreadWhenThreadIsNone(self, patch):
         self.lockManager.startUpdateExpiryThread()
         self.assertTrue(self.lockManager._updateExpiryThread.called_once())
         
-    @with_setup(setUp, tearDown)
-    @patch("ResourceMutexManager.ResourceMutexManager._updateExpiryThread")
+    @patch("resourcemutexmanager.ResourceMutexManager._updateExpiryThread")
     @patch("threading.Thread")
     def test_startUpdateExpiryThread_startThreadWhenThreadIsntAlive(self, resourceLockManagerPatch, threadingPatch):
         self.lockManager._thread = threading.Thread()
         self.lockManager._thread.isAlive.return_value = False
         self.lockManager.startUpdateExpiryThread()
         self.assertTrue(self.lockManager._updateExpiryThread.call_once())
-        
-    @with_setup(setUp, tearDown)
-    @patch("ResourceMutexManager.ResourceMutexManager._updateExpiryThread")
+
+    @patch("resourcemutexmanager.ResourceMutexManager._updateExpiryThread")
     @patch("threading.Thread")
     def test_startUpdateExpiryThread_doesntStartThreadWhenThreadIsAlive(self, resourceLockManagerPatch, threadingPatch):
         self.lockManager._thread = threading.Thread()
         self.lockManager._thread.isAlive.return_value = True
         self.lockManager.startUpdateExpiryThread()
         self.assertTrue(self.lockManager._updateExpiryThread.call_count == 0)
-        
-    @with_setup(setUp, tearDown)
+
     @patch("time.sleep")
     def test_updateExpiryThread_updatesExpiry(self, timePatch):
         self.assertTrue(self.lockManager.waitFor(RESOURCE_ONE))
@@ -113,8 +97,7 @@ class Test_ResourceLock(unittest.TestCase):
         self.lockManager.stopUpdateExpiryThread()
         self.assertTrue(self.lockManager._redisClient.expire.call_count > 0)
         self.assertFalse(self.lockManager._thread.isAlive())
-    
-    @with_setup(setUp, tearDown)
+
     @patch("time.sleep")
     def test_updateExpiryThread_reacquiresResourceIfList(self, timePatch):
         self.lockManager._redisClient.expire.return_value = 0
@@ -127,20 +110,12 @@ class Test_ResourceLock(unittest.TestCase):
         
         self.assertTrue(self.lockManager._redisClient.expire.call_count > 0)
         self.assertTrue(self.lockManager._redisClient.setnx.call_count > originalSetnxCallCount)
-        
-    def test_customLogger_customLoggerUsedInsteadOfDefaultOne(self):
-        mockLog = Mock()
-        customLog = ResourceMutexManager(log=mockLog)
-        self.assertTrue(customLog.log == mockLog)
-        self.assertFalse(isinstance(customLog.log, logging.Logger))
-        
-        nonCustomLog = ResourceMutexManager()
-        self.assertTrue(isinstance(nonCustomLog.log, logging.Logger))
+
     
-    @patch("ResourceMutexManager.ResourceMutexManager.waitFor")
-    @patch("ResourceMutexManager.ResourceMutexManager.startUpdateExpiryThread")
-    @patch("ResourceMutexManager.ResourceMutexManager.stopUpdateExpiryThread")
-    @patch("ResourceMutexManager.ResourceMutexManager.releaseResources")
+    @patch("resourcemutexmanager.ResourceMutexManager.waitFor")
+    @patch("resourcemutexmanager.ResourceMutexManager.startUpdateExpiryThread")
+    @patch("resourcemutexmanager.ResourceMutexManager.stopUpdateExpiryThread")
+    @patch("resourcemutexmanager.ResourceMutexManager.releaseResources")
     def test_with_acquiresLocksStartsUpdatesStopUpdatesReleasesLocks(self, *args):
         lockManager = ResourceMutexManager()
         with lockManager.lock(RESOURCE_ONE):
